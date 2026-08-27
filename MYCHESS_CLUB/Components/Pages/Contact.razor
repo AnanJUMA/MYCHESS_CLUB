@@ -1,0 +1,65 @@
+﻿@page "/contact"
+@rendermode InteractiveServer
+
+<PageTitle>Contact Us</PageTitle>
+
+<h1>Contact Our Chess Club 📞</h1>
+
+<p>
+    Have a question about the club? Send us a message.
+</p>
+
+<h2>Send Us a Message</h2>
+
+<div>
+    <label>Your Name:</label>
+    <br />
+    <input @bind="name" />
+</div>
+
+<br />
+
+<div>
+    <label>Your Email:</label>
+    <br />
+    <input @bind="email" type="email" />
+</div>
+
+<br />
+
+<div>
+    <label>Your Message:</label>
+    <br />
+    <textarea @bind="message"></textarea>
+</div>
+
+<br />
+
+<button @onclick="SendMessage">
+    Send Message
+</button>
+
+@if (messageSent)
+{
+    <p>
+        ✅ Thank you, <strong>@name</strong>!
+        Your message has been received.
+    </p>
+}
+
+@code {
+    string name = "";
+    string email = "";
+    string message = "";
+
+    bool messageSent = false;
+
+    void SendMessage()
+    {
+        if (!string.IsNullOrWhiteSpace(name) &&
+            !string.IsNullOrWhiteSpace(message))
+        {
+            messageSent = true;
+        }
+    }
+}

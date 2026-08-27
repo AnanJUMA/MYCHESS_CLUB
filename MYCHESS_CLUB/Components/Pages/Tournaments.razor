@@ -1,0 +1,91 @@
+﻿@page "/tournaments"
+@rendermode InteractiveServer
+@using MYCHESS_CLUB.Services
+@inject TournamentService TournamentService
+
+<PageTitle>Tournaments - Lucky Stars Chess Club</PageTitle>
+
+<div class="page-header">
+    <div class="page-header-icon">🏆♟️</div>
+    <h1>Chess Tournaments</h1>
+    <p>Checkmate the Odds</p>
+</div>
+
+<section class="tournament-section">
+    <h2>Upcoming Tournaments</h2>
+
+    <div class="tournament-list">
+        @if (tournaments == null)
+        {
+            <p>Loading tournaments...</p>
+        }
+        else
+        {
+            @foreach (var tournament in tournaments)
+            {
+                <div class="tournament-card">
+                    <div class="tournament-icon">🏆</div>
+                    <div class="tournament-info">
+                        <h3>@tournament.Name</h3>
+                        <p>@tournament.Description</p>
+
+                        <div class="tournament-details">
+                            <p><strong>📅 Date:</strong> @tournament.Date.ToShortDateString()</p>
+                            <p><strong>📍 Location:</strong> @tournament.Location</p>
+                            <p><strong>♟️ Format:</strong> @tournament.Format</p>
+                            <p><strong>👥 Eligibility:</strong> @tournament.Eligibility</p>
+                        </div>
+
+                        <button @onclick="() => RegisterInterest(tournament)">Register Interest</button>
+
+                        @if (registeredTournament == tournament)
+                        {
+                            <p class="success-message">✅ Your interest in this tournament has been recorded!</p>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</section>
+
+<section class="tournament-section">
+    <h2>Why Participate?</h2>
+    <div class="tournament-benefits">
+        <div class="benefit-card">
+            <span>🧠</span>
+            <h3>Improve</h3>
+            <p>Challenge yourself and improve your decision-making and chess skills.</p>
+        </div>
+        <div class="benefit-card">
+            <span>🏆</span>
+            <h3>Compete</h3>
+            <p>Gain tournament experience and test your abilities.</p>
+        </div>
+        <div class="benefit-card">
+            <span>🤝</span>
+            <h3>Connect</h3>
+            <p>Meet fellow chess players and become part of our community.</p>
+        </div>
+    </div>
+</section>
+
+<section class="tournament-section">
+    <h2>Past Results</h2>
+    <p>Tournament results will appear here after our first official competitions.</p>
+</section>
+
+@code {
+    private List<Tournament>? tournaments;
+    private Tournament? registeredTournament;
+
+    protected override void OnInitialized()
+    {
+        tournaments = TournamentService.GetTournaments();
+    }
+
+    private void RegisterInterest(Tournament tournament)
+    {
+        registeredTournament = tournament;
+    }
+}

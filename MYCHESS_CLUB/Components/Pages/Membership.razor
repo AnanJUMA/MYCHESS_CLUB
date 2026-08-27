@@ -1,0 +1,54 @@
+﻿@page "/membership"
+@rendermode InteractiveServer
+
+<PageTitle>Membership</PageTitle>
+
+<h1>Join Our Chess Club ♟️</h1>
+
+<p>
+    Become a member and take part in our chess activities,
+    training sessions, and tournaments.
+</p>
+
+<h2>Membership Benefits</h2>
+
+<ul>
+    <li>♟️ Attend club chess sessions</li>
+    <li>🏆 Participate in tournaments</li>
+    <li>🧠 Take part in training</li>
+    <li>🤝 Meet other chess players</li>
+</ul>
+
+<h2>Join Us</h2>
+
+<label>
+    Your Name:
+    <input @bind="memberName" />
+</label>
+
+<br />
+<br />
+
+<button @onclick="JoinClub">
+    Join the Club
+</button>
+
+@if (joined)
+{
+    <p>
+        🎉 Welcome to the club, <strong>@memberName</strong>!
+    </p>
+}
+
+@code {
+    string memberName = "";
+    bool joined = false;
+
+    void JoinClub()
+    {
+        if (!string.IsNullOrWhiteSpace(memberName))
+        {
+            joined = true;
+        }
+    }
+}

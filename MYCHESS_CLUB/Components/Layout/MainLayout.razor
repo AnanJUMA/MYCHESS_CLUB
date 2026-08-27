@@ -1,0 +1,56 @@
+﻿@inherits LayoutComponentBase
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        
+        <div class="top-row px-4">
+            ...
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+
+        <footer class="site-footer">
+
+            <div class="footer-content">
+
+                <div class="footer-brand">
+                    <h2>⭐ Lucky Stars Chess Club</h2>
+
+                    <p>
+                        Checkmate the Odds
+                    </p>
+                </div>
+
+                <div class="footer-links">
+                    <a href="/">Home</a>
+                    <a href="/about">About Us</a>
+                    <a href="/tournaments">Tournaments</a>
+                    <a href="/events">Events</a>
+                    <a href="/membership">Membership</a>
+                    <a href="/contact">Contact</a>
+                </div>
+
+            </div>
+
+            <div class="footer-bottom">
+                <p>
+                    © @DateTime.Now.Year Lucky Stars Chess Club.
+                    All rights reserved.
+                </p>
+            </div>
+
+        </footer>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
