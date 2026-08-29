@@ -638,3 +638,180 @@ h1:focus {
     text-align: center;
     font-weight: 600;
 }
+
+
+/* Chessboard styles */
+.play-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.game-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.turn-indicator {
+    font-size: 1.2rem;
+}
+
+.board-wrapper {
+    display: flex;
+    justify-content: center;
+}
+
+.board {
+    display: inline-block;
+    border: 4px solid #333;
+    border-radius: 4px;
+}
+
+.board-row {
+    display: flex;
+}
+
+.square {
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    cursor: pointer;
+    user-select: none;
+}
+
+    .square.light {
+        background-color: #f0d9b5;
+    }
+
+    .square.dark {
+        background-color: #b58863;
+    }
+
+    .square.selected {
+        background-color: #7fc97f !important; /* highlight */
+    }
+
+.piece {
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    line-height: 1;
+}
+
+/* Captured piece trays, shown above/below the board */
+.captured-tray {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    min-height: 34px;
+    max-width: 480px;
+    margin: 8px auto;
+    padding: 4px 10px;
+    background-color: #f0d9b5;
+    border: 1px solid #333;
+    border-radius: 4px;
+}
+
+.captured-piece {
+    font-size: 22px;
+    line-height: 1;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+    .captured-piece.white {
+        color: #fff;
+        -webkit-text-stroke: 0.5px #333;
+    }
+
+    .captured-piece.black {
+        color: #000;
+    }
+
+/* Check / checkmate / stalemate banner */
+
+.status-message {
+    max-width: 480px;
+    margin: 0 auto 12px auto;
+    padding: 8px 14px;
+    text-align: center;
+    font-weight: bold;
+    border-radius: 4px;
+}
+
+.status-message.check {
+    background-color: #fff3cd;
+    color: #7a5b00;
+    border: 1px solid #ffe08a;
+}
+
+.status-message.checkmate {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c2c7;
+}
+
+/* Highlight the king's square when it's in check */
+.square.king-check {
+    background-color: #e57373 !important;
+}
+
+
+
+/* Pawn promotion picker */
+.promotion-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.promotion-modal {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px 24px;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.promotion-choices {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.promotion-choice {
+    width: 56px;
+    height: 56px;
+    font-size: 32px;
+    border: 2px solid #333;
+    border-radius: 6px;
+    background: #f0d9b5;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+    .promotion-choice:hover {
+        background: #d9b98a;
+    }
+
+/* Responsive for smaller screens */
+@media (max-width: 600px) {
+    .square {
+        width: 40px;
+        height: 40px;
+        font-size: 24px;
+    }
+
+    .captured-piece {
+        font-size: 16px;
+    }
+}
