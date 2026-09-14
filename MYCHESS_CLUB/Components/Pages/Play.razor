@@ -1,6 +1,8 @@
 ﻿@page "/play"
 @rendermode InteractiveServer
 @using MYCHESS_CLUB.Models
+@inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>Play Chess - Lucky Stars Chess Club</PageTitle>
 
@@ -8,6 +10,16 @@
     <h1>♟️ Play Chess</h1>
     <div class="game-info">
         <span class="turn-indicator">Turn: <strong>@(CurrentTurn == PieceColor.White ? "White" : "Black")</strong></span>
+        <div class="time-control-picker">
+            <span>Time:</span>
+            @foreach (var preset in TimeControlPresets)
+            {
+                <button class="@(SelectedTimeControlMinutes == preset ? "preset-active" : "")"
+                        @onclick="() => SetTimeControl(preset)">
+                    @preset min
+                </button>
+            }
+        </div>
         <button @onclick="ResetGame">🔄 Reset</button>
     </div>
 
@@ -18,52 +30,100 @@
         </div>
     }
 
-    <div class="captured-tray">
-        @foreach (var p in CapturedBlackPieces)
-        {
-            <span class="captured-piece black">@p.UnicodeSymbol</span>
-        }
-    </div>
-
-    <div class="board-wrapper">
-        <div class="board">
-            @for (int r = 7; r >= 0; r--)
+    <div class="player-panel">
+        <div class="captured-tray">
+            @foreach (var p in CapturedWhitePieces)
             {
-                var row = r;
-
-                <div class="board-row">
-                    @for (int c = 0; c < 8; c++)
-                    {
-                        var col = c;
-
-                        var piece = Board[row, col];
-                        var isLight = (row + col) % 2 == 0;
-                        var isSelected = SelectedSquare?.Row == row && SelectedSquare?.Col == col;
-                        var isKingInCheckSquare = piece != null
-                            && piece.Type == PieceType.King
-                            && ((piece.Color == PieceColor.White && WhiteInCheck) || (piece.Color == PieceColor.Black && BlackInCheck));
-
-                        var cssClass = $"square {(isLight ? "light" : "dark")} {(isSelected ? "selected" : "")} {(isKingInCheckSquare ? "king-check" : "")}";
-
-                        <div class="@cssClass" @onclick="() => OnSquareClick(row, col)">
-                            @if (piece != null)
-                            {
-                                <span class="piece" style="color: @(piece.Color == PieceColor.White ? "#fff" : "#000")">
-                                    @piece.UnicodeSymbol
-                                </span>
-                            }
-                        </div>
-                    }
-                </div>
+                <span class="captured-piece white">@p.UnicodeSymbol</span>
             }
+        </div>
+        <div class="clock @(CurrentTurn == PieceColor.White && !GameOver ? "active" : "") @(WhiteSecondsRemaining <= 30 ? "low-time" : "")">
+            @FormatTime(WhiteSecondsRemaining)
         </div>
     </div>
 
-    <div class="captured-tray">
-        @foreach (var p in CapturedWhitePieces)
-        {
-            <span class="captured-piece white">@p.UnicodeSymbol</span>
-        }
+    <div class="game-layout">
+        <div class="board-wrapper">
+            <div class="board">
+                @for (int r = 7; r >= 0; r--)
+                {
+                    var row = r;
+
+                    <div class="board-row">
+                        @for (int c = 0; c < 8; c++)
+                        {
+                            var col = c;
+
+                            var piece = Board[row, col];
+                            var isLight = (row + col) % 2 == 0;
+                            var isSelected = SelectedSquare?.Row == row && SelectedSquare?.Col == col;
+                            var isKingInCheckSquare = piece != null
+                                && piece.Type == PieceType.King
+                                && ((piece.Color == PieceColor.White && WhiteInCheck) || (piece.Color == PieceColor.Black && BlackInCheck));
+                            var isLegalTarget = LegalTargets.Contains((row, col));
+                            var isCaptureTarget = isLegalTarget && piece != null;
+                            var isLastMove = (LastMoveFrom != null && LastMoveFrom.Row == row && LastMoveFrom.Col == col)
+                                || (LastMoveTo != null && LastMoveTo.Row == row && LastMoveTo.Col == col);
+                            var isDraggable = piece != null && piece.Color == CurrentTurn && !GameOver && !PendingPromotion;
+
+                            var cssClass = $"square {(isLight ? "light" : "dark")}"
+                                + $" {(isSelected ? "selected" : "")}"
+                                + $" {(isKingInCheckSquare ? "king-check" : "")}"
+                                + $" {(isLastMove ? "last-move" : "")}"
+                                + $" {(isLegalTarget ? (isCaptureTarget ? "legal-target capture-target" : "legal-target") : "")}";
+
+                            <div class="@cssClass"
+                                 draggable="@(isDraggable ? "true" : "false")"
+                                 @ondragstart="() => OnDragStart(row, col)"
+                                 @ondragover:preventDefault
+                                 @ondrop="() => OnDrop(row, col)"
+                                 @onclick="() => OnSquareClick(row, col)">
+                                @if (piece != null)
+                                {
+                                    <span class="piece" style="color: @(piece.Color == PieceColor.White ? "#fff" : "#000")">
+                                        @piece.UnicodeSymbol
+                                    </span>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="move-history">
+            <h3>Moves</h3>
+            <div class="move-history-list">
+                @for (int i = 0; i < MoveHistory.Count; i += 2)
+                {
+                    var moveNumber = (i / 2) + 1;
+                    var whiteMove = MoveHistory[i];
+                    var blackMove = (i + 1 < MoveHistory.Count) ? MoveHistory[i + 1] : "";
+
+                    <div class="move-history-item">
+                        <span class="move-number">@moveNumber.</span>
+                        <span class="move-white">@whiteMove</span>
+                        <span class="move-black">@blackMove</span>
+                    </div>
+                }
+                @if (MoveHistory.Count == 0)
+                {
+                    <div class="move-history-empty">No moves yet</div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="player-panel">
+        <div class="captured-tray">
+            @foreach (var p in CapturedBlackPieces)
+            {
+                <span class="captured-piece black">@p.UnicodeSymbol</span>
+            }
+        </div>
+        <div class="clock @(CurrentTurn == PieceColor.Black && !GameOver ? "active" : "") @(BlackSecondsRemaining <= 30 ? "low-time" : "")">
+            @FormatTime(BlackSecondsRemaining)
+        </div>
     </div>
 
     @if (PendingPromotion && PromotionSquare != null)
@@ -97,17 +157,28 @@
     private bool GameOver = false;
     private string StatusMessage = "";
 
-    // The square a pawn can capture into via en passant, valid only for
-    // the move immediately following an opponent's two-square pawn push.
     private Square? EnPassantTarget = null;
 
-    // Pawn promotion: move already placed the pawn on the back rank,
-    // waiting on the player to pick what it becomes.
     private bool PendingPromotion = false;
     private Square? PromotionSquare = null;
+    private string? PendingMoveNotation = null;
+    private bool PendingMoveWasCapture = false;
+
+    private List<string> MoveHistory = new();
+    private Square? LastMoveFrom = null;
+    private Square? LastMoveTo = null;
+    private HashSet<(int Row, int Col)> LegalTargets = new();
 
     private bool WhiteInCheck => IsKingInCheck(PieceColor.White);
     private bool BlackInCheck => IsKingInCheck(PieceColor.Black);
+
+    // ---- Clock ----
+    private readonly int[] TimeControlPresets = { 5, 10, 15 };
+    private int SelectedTimeControlMinutes = 10;
+    private int WhiteSecondsRemaining;
+    private int BlackSecondsRemaining;
+    private System.Timers.Timer? GameClock;
+    private bool GameStarted = false;
 
     private class Square
     {
@@ -133,6 +204,17 @@
         EnPassantTarget = null;
         PendingPromotion = false;
         PromotionSquare = null;
+        PendingMoveNotation = null;
+        PendingMoveWasCapture = false;
+        MoveHistory = new();
+        LastMoveFrom = null;
+        LastMoveTo = null;
+        LegalTargets.Clear();
+
+        WhiteSecondsRemaining = SelectedTimeControlMinutes * 60;
+        BlackSecondsRemaining = SelectedTimeControlMinutes * 60;
+        GameStarted = false;
+        StopClock(); // clock only starts once White makes the first move
 
         for (int col = 0; col < 8; col++)
         {
@@ -153,76 +235,222 @@
         }
     }
 
-    private void OnSquareClick(int row, int col)
+    // ===================== Clock =====================
+
+    private void SetTimeControl(int minutes)
     {
-        if (GameOver || PendingPromotion) return;
-        if (row < 0 || row > 7 || col < 0 || col > 7) return;
+        SelectedTimeControlMinutes = minutes;
+        ResetGame(); // time control can't change mid-game — start fresh
+    }
 
-        var clickedPiece = Board[row, col];
-        var clickedSquare = new Square(row, col);
-
-        // ---- No piece selected yet ----
-        if (SelectedSquare == null)
+    /// <summary>Called right after the very first move is made — the clock
+    /// doesn't run at all until then, so White's opening move is unclocked.</summary>
+    private void EnsureClockStarted()
+    {
+        if (!GameStarted)
         {
-            if (clickedPiece != null && clickedPiece.Color == CurrentTurn)
+            GameStarted = true;
+            StartClock();
+        }
+    }
+
+    private void StartClock()
+    {
+        StopClock();
+        GameClock = new System.Timers.Timer(1000);
+        GameClock.Elapsed += OnClockTick;
+        GameClock.AutoReset = true;
+        GameClock.Start();
+    }
+
+    private void StopClock()
+    {
+        if (GameClock != null)
+        {
+            GameClock.Stop();
+            GameClock.Elapsed -= OnClockTick;
+            GameClock.Dispose();
+            GameClock = null;
+        }
+    }
+
+    private async void OnClockTick(object? sender, System.Timers.ElapsedEventArgs e)
+    {
+        if (GameOver || PendingPromotion) return; // pause while a promotion choice is pending
+
+        await InvokeAsync(async () =>
+        {
+            if (GameOver) return; // re-check inside the UI thread in case it changed just before this ran
+
+            if (CurrentTurn == PieceColor.White)
             {
-                SelectedSquare = clickedSquare;
-            }
-            return;
-        }
-
-        // ---- Already have a selected piece ----
-        var selectedPiece = Board[SelectedSquare.Row, SelectedSquare.Col];
-
-        // Clicking the same square again deselects it
-        if (SelectedSquare.Row == row && SelectedSquare.Col == col)
-        {
-            SelectedSquare = null;
-            return;
-        }
-
-        // Clicking another one of your own pieces re-selects instead of moving
-        if (clickedPiece != null && clickedPiece.Color == CurrentTurn)
-        {
-            SelectedSquare = clickedSquare;
-            return;
-        }
-
-        if (selectedPiece == null) { SelectedSquare = null; return; }
-
-        // ---- Castling attempt: king moving two squares sideways ----
-        if (selectedPiece.Type == PieceType.King && row == SelectedSquare.Row && Math.Abs(col - SelectedSquare.Col) == 2)
-        {
-            bool kingSide = col > SelectedSquare.Col;
-            if (CanCastle(selectedPiece.Color, kingSide))
-            {
-                PerformCastle(selectedPiece.Color, kingSide);
-                EnPassantTarget = null;
-                CurrentTurn = CurrentTurn == PieceColor.White ? PieceColor.Black : PieceColor.White;
-                SelectedSquare = null;
-                UpdateGameStatus();
+                WhiteSecondsRemaining = Math.Max(0, WhiteSecondsRemaining - 1);
+                if (WhiteSecondsRemaining == 0) { await HandleTimeOut(PieceColor.White); return; }
+                if (WhiteSecondsRemaining <= 10) await PlaySound("tick");
             }
             else
             {
-                SelectedSquare = null;
+                BlackSecondsRemaining = Math.Max(0, BlackSecondsRemaining - 1);
+                if (BlackSecondsRemaining == 0) { await HandleTimeOut(PieceColor.Black); return; }
+                if (BlackSecondsRemaining <= 10) await PlaySound("tick");
             }
-            return;
-        }
 
-        // ---- Validate the move (shape, including en passant as a pawn diagonal) ----
-        if (!IsMoveValid(selectedPiece, SelectedSquare, clickedSquare))
+            StateHasChanged();
+        });
+    }
+
+    private async Task HandleTimeOut(PieceColor colorThatRanOut)
+    {
+        StopClock();
+        GameOver = true;
+        string winner = colorThatRanOut == PieceColor.White ? "Black" : "White";
+        string loser = colorThatRanOut == PieceColor.White ? "White" : "Black";
+        StatusMessage = $"{loser} ran out of time! {winner} wins.";
+        StateHasChanged();
+        await PlaySound("gameOver");
+    }
+
+    private string FormatTime(int totalSeconds)
+    {
+        int m = totalSeconds / 60;
+        int s = totalSeconds % 60;
+        return $"{m}:{s:D2}";
+    }
+
+    public void Dispose()
+    {
+        StopClock();
+    }
+
+    // ===================== Selection / input handling =====================
+
+    private async Task OnSquareClick(int row, int col)
+    {
+        if (GameOver || PendingPromotion) return;
+
+        var square = new Square(row, col);
+        var piece = Board[row, col];
+
+        if (SelectedSquare == null)
         {
+            SelectPiece(square, piece);
             return;
         }
 
-        // ---- Validate the move doesn't leave your own king in check ----
-        if (WouldLeaveKingInCheck(selectedPiece, SelectedSquare, clickedSquare))
+        if (SelectedSquare.Row == row && SelectedSquare.Col == col)
         {
+            DeselectPiece();
             return;
         }
 
-        // ---- Perform the move (handles normal capture + en passant capture) ----
-        var (capturedAtTo, capturedEnPassant, _, _) = ApplyMove(selectedPiece, SelectedSquare, clickedSquare);
+        if (piece != null && piece.Color == CurrentTurn)
+        {
+            SelectPiece(square, piece);
+            return;
+        }
+
+        await AttemptMove(SelectedSquare, square);
+    }
+
+    private void OnDragStart(int row, int col)
+    {
+        if (GameOver || PendingPromotion) return;
+        SelectPiece(new Square(row, col), Board[row, col]);
+    }
+
+    private async Task OnDrop(int row, int col)
+    {
+        if (GameOver || PendingPromotion || SelectedSquare == null) return;
+
+        if (SelectedSquare.Row == row && SelectedSquare.Col == col)
+        {
+            DeselectPiece();
+            return;
+        }
+
+        var moved = await AttemptMove(SelectedSquare, new Square(row, col));
+        if (!moved)
+        {
+            DeselectPiece(); // drop failed — don't leave a stale highlight hanging around
+        }
+    }
+
+    private void SelectPiece(Square square, ChessPiece? piece)
+    {
+        if (piece == null || piece.Color != CurrentTurn) return;
+        SelectedSquare = square;
+        ComputeLegalTargets(square);
+    }
+
+    private void DeselectPiece()
+    {
+        SelectedSquare = null;
+        LegalTargets.Clear();
+    }
+
+    private void ComputeLegalTargets(Square from)
+    {
+        LegalTargets.Clear();
+        var piece = Board[from.Row, from.Col];
+        if (piece == null) return;
+
+        for (int r = 0; r < 8; r++)
+            for (int c = 0; c < 8; c++)
+            {
+                if (r == from.Row && c == from.Col) continue;
+                var to = new Square(r, c);
+                if (IsMoveValid(piece, from, to) && !WouldLeaveKingInCheck(piece, from, to))
+                    LegalTargets.Add((r, c));
+            }
+
+        if (piece.Type == PieceType.King)
+        {
+            if (CanCastle(piece.Color, true)) LegalTargets.Add((from.Row, from.Col + 2));
+            if (CanCastle(piece.Color, false)) LegalTargets.Add((from.Row, from.Col - 2));
+        }
+    }
+
+    // ===================== Move execution =====================
+
+    /// <summary>
+    /// Validates and (if legal) performs a move from `from` to `to`,
+    /// including castling and en passant, updates captures, notation,
+    /// promotion state, turn, game status, and plays a sound.
+    /// Returns true if the move was actually made.
+    /// </summary>
+    private async Task<bool> AttemptMove(Square from, Square to)
+    {
+        var piece = Board[from.Row, from.Col];
+        if (piece == null || piece.Color != CurrentTurn) return false;
+        if (from.Row == to.Row && from.Col == to.Col) return false;
+
+        // ---- Castling ----
+        if (piece.Type == PieceType.King && from.Row == to.Row && Math.Abs(to.Col - from.Col) == 2)
+        {
+            bool kingSide = to.Col > from.Col;
+            if (!CanCastle(piece.Color, kingSide)) return false;
+
+            PerformCastle(piece.Color, kingSide);
+            EnPassantTarget = null;
+            LastMoveFrom = from;
+            LastMoveTo = to;
+            SelectedSquare = null;
+            LegalTargets.Clear();
+
+            CurrentTurn = Opponent(CurrentTurn);
+            EnsureClockStarted();
+            UpdateGameStatus();
+            await FinalizeMoveNotation(kingSide ? "O-O" : "O-O-O", "", isCapture: false, castled: true);
+            return true;
+        }
+
+        // ---- Normal / en passant moves ----
+        if (!IsMoveValid(piece, from, to)) return false;
+        if (WouldLeaveKingInCheck(piece, from, to)) return false;
+
+        string pieceLetter = PieceLetter(piece.Type);
+        var (capturedAtTo, capturedEnPassant, _, _) = ApplyMove(piece, from, to);
+        bool isCapture = capturedAtTo != null || capturedEnPassant != null;
 
         if (capturedAtTo != null)
         {
@@ -235,31 +463,41 @@
             else CapturedBlackPieces.Add(capturedEnPassant);
         }
 
-        selectedPiece.HasMoved = true;
+        piece.HasMoved = true;
+        LastMoveFrom = from;
+        LastMoveTo = to;
+        SelectedSquare = null;
+        LegalTargets.Clear();
 
-        // Update en passant target for the NEXT move only
         EnPassantTarget = null;
-        if (selectedPiece.Type == PieceType.Pawn && Math.Abs(row - SelectedSquare.Row) == 2)
+        if (piece.Type == PieceType.Pawn && Math.Abs(to.Row - from.Row) == 2)
         {
-            EnPassantTarget = new Square((row + SelectedSquare.Row) / 2, col);
+            EnPassantTarget = new Square((to.Row + from.Row) / 2, to.Col);
         }
 
-        // ---- Pawn promotion check ----
-        if (selectedPiece.Type == PieceType.Pawn && (row == 0 || row == 7))
+        string baseNotation = piece.Type == PieceType.Pawn
+            ? (isCapture ? $"{(char)('a' + from.Col)}x{ToAlgebraic(to)}" : ToAlgebraic(to))
+            : $"{pieceLetter}{(isCapture ? "x" : "")}{ToAlgebraic(to)}";
+
+        // ---- Pawn promotion: pause here, don't switch turns yet ----
+        if (piece.Type == PieceType.Pawn && (to.Row == 0 || to.Row == 7))
         {
             PendingPromotion = true;
-            PromotionSquare = clickedSquare;
-            SelectedSquare = null;
-            return; // don't switch turns yet — wait for the player's choice
+            PromotionSquare = to;
+            PendingMoveNotation = baseNotation;
+            PendingMoveWasCapture = isCapture;
+            await PlaySound(isCapture ? "capture" : "move");
+            return true;
         }
 
-        CurrentTurn = CurrentTurn == PieceColor.White ? PieceColor.Black : PieceColor.White;
-        SelectedSquare = null;
-
+        CurrentTurn = Opponent(CurrentTurn);
+        EnsureClockStarted();
         UpdateGameStatus();
+        await FinalizeMoveNotation(baseNotation, "", isCapture: isCapture, castled: false);
+        return true;
     }
 
-    private void CompletePromotion(PieceType chosenType)
+    private async Task CompletePromotion(PieceType chosenType)
     {
         if (!PendingPromotion || PromotionSquare == null) return;
 
@@ -272,9 +510,55 @@
         PendingPromotion = false;
         PromotionSquare = null;
 
-        CurrentTurn = CurrentTurn == PieceColor.White ? PieceColor.Black : PieceColor.White;
+        CurrentTurn = Opponent(CurrentTurn);
+        EnsureClockStarted();
         UpdateGameStatus();
+
+        string promoSuffix = $"={PieceLetter(chosenType)}";
+        await FinalizeMoveNotation(PendingMoveNotation ?? "", promoSuffix, isCapture: PendingMoveWasCapture, castled: false);
+        PendingMoveNotation = null;
     }
+
+    private async Task FinalizeMoveNotation(string baseNotation, string suffix, bool isCapture, bool castled)
+    {
+        bool checkNow = CurrentTurn == PieceColor.White ? WhiteInCheck : BlackInCheck;
+        string checkSuffix = GameOver && checkNow ? "#" : (checkNow ? "+" : "");
+        MoveHistory.Add(baseNotation + suffix + checkSuffix);
+
+        string sound = GameOver ? "gameOver"
+            : checkNow ? "check"
+            : castled ? "castle"
+            : isCapture ? "capture"
+            : "move";
+
+        await PlaySound(sound);
+    }
+
+    private async Task PlaySound(string type)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("chessSounds.play", type);
+        }
+        catch
+        {
+            // JS interop not ready (e.g. mid-prerender) — safe to ignore
+        }
+    }
+
+    private string PieceLetter(PieceType t) => t switch
+    {
+        PieceType.King => "K",
+        PieceType.Queen => "Q",
+        PieceType.Rook => "R",
+        PieceType.Bishop => "B",
+        PieceType.Knight => "N",
+        _ => ""
+    };
+
+    private string ToAlgebraic(Square sq) => $"{(char)('a' + sq.Col)}{8 - sq.Row}";
+
+    private PieceColor Opponent(PieceColor c) => c == PieceColor.White ? PieceColor.Black : PieceColor.White;
 
     private void UpdateGameStatus()
     {
@@ -285,12 +569,14 @@
         if (inCheck && !hasMoves)
         {
             GameOver = true;
+            StopClock();
             string winner = CurrentTurn == PieceColor.White ? "Black" : "White";
             StatusMessage = $"Checkmate! {winner} wins.";
         }
         else if (!inCheck && !hasMoves)
         {
             GameOver = true;
+            StopClock();
             StatusMessage = "Stalemate! The game is a draw.";
         }
         else if (inCheck)
@@ -305,7 +591,6 @@
 
     // ===================== Castling =====================
 
-    /// <summary>Pure check — does NOT mutate the board.</summary>
     private bool CanCastle(PieceColor color, bool kingSide)
     {
         int homeRow = color == PieceColor.White ? 7 : 0;
@@ -325,10 +610,9 @@
             if (Board[homeRow, c] != null) return false;
         }
 
-        // King cannot castle out of, through, or into check
         if (IsKingInCheck(color)) return false;
 
-        var opponent = color == PieceColor.White ? PieceColor.Black : PieceColor.White;
+        var opponent = Opponent(color);
         int kingStep = newKingCol > kingCol ? 1 : -1;
         for (int c = kingCol; c != newKingCol + kingStep; c += kingStep)
         {
@@ -338,7 +622,6 @@
         return true;
     }
 
-    /// <summary>Assumes CanCastle already returned true.</summary>
     private void PerformCastle(PieceColor color, bool kingSide)
     {
         int homeRow = color == PieceColor.White ? 7 : 0;
@@ -378,7 +661,7 @@
         var kingSquare = FindKing(color);
         if (kingSquare == null) return false;
 
-        var opponent = color == PieceColor.White ? PieceColor.Black : PieceColor.White;
+        var opponent = Opponent(color);
         return IsSquareAttacked(kingSquare, opponent);
     }
 
@@ -431,14 +714,8 @@
         }
     }
 
-    // ===================== Move simulation (shared by real moves and check-testing) =====================
+    // ===================== Move simulation =====================
 
-    /// <summary>
-    /// Mutates the board to perform the move, including removing the
-    /// correct pawn on an en passant capture. Returns what was captured
-    /// (and where, for en passant) so the caller can either record it
-    /// (real move) or undo it (simulation).
-    /// </summary>
     private (ChessPiece? capturedAtTo, ChessPiece? capturedEnPassant, int epRow, int epCol) ApplyMove(ChessPiece piece, Square from, Square to)
     {
         ChessPiece? capturedAtTo = Board[to.Row, to.Col];
@@ -500,7 +777,6 @@
                     }
             }
 
-        // Castling isn't covered by IsMoveValid's king rule, so check it separately
         return CanCastle(color, true) || CanCastle(color, false);
     }
 
@@ -537,7 +813,6 @@
                 return (diagonal || straight) && IsPathClear(from, to);
 
             case PieceType.King:
-                // Castling (2-square king move) is handled separately in OnSquareClick
                 return absRow <= 1 && absCol <= 1 && (absRow + absCol > 0);
 
             default:
@@ -567,10 +842,7 @@
 
         if (Math.Abs(colDiff) == 1 && rowDiff == direction)
         {
-            if (target != null) return true; // normal diagonal capture
-
-            // En passant: diagonal move into an empty square, only legal
-            // if it's exactly the current en passant target square
+            if (target != null) return true;
             return EnPassantTarget != null && to.Row == EnPassantTarget.Row && to.Col == EnPassantTarget.Col;
         }
 
