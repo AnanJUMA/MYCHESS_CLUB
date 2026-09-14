@@ -9,7 +9,37 @@
 <div class="play-container">
     <h1>♟️ Play Chess</h1>
     <div class="game-info">
-        <span class="turn-indicator">Turn: <strong>@(CurrentTurn == PieceColor.White ? "White" : "Black")</strong></span>
+        <span class="turn-indicator">
+            Turn: <strong>@(CurrentTurn == PieceColor.White ? "White" : "Black")</strong>
+            @if (Mode == OpponentMode.Ai && CurrentTurn == AiColor && !GameOver)
+            {
+                <span class="ai-badge">AI</span>
+            }
+        </span>
+
+        <div class="opponent-picker">
+            <span>Opponent:</span>
+            <select value="@Mode" @onchange="OnOpponentModeChanged">
+                <option value="Human">Human</option>
+                <option value="Ai">AI</option>
+            </select>
+
+            @if (Mode == OpponentMode.Ai)
+            {
+                <select value="@SelectedDifficulty" @onchange="OnDifficultyChanged">
+                    @foreach (var d in Enum.GetValues<AiDifficulty>())
+                    {
+                        <option value="@d">@d</option>
+                    }
+                </select>
+
+                <select value="@HumanColor" @onchange="OnHumanColorChanged">
+                    <option value="White">Play as White</option>
+                    <option value="Black">Play as Black</option>
+                </select>
+            }
+        </div>
+
         <div class="time-control-picker">
             <span>Time:</span>
             @foreach (var preset in TimeControlPresets)
@@ -20,10 +50,15 @@
                 </button>
             }
         </div>
+
         <button @onclick="ResetGame">🔄 Reset</button>
     </div>
 
-    @if (!string.IsNullOrEmpty(StatusMessage))
+    @if (AiThinking)
+    {
+        <div class="status-message thinking">🤔 AI is thinking...</div>
+    }
+    else if (!string.IsNullOrEmpty(StatusMessage))
     {
         <div class="status-message @(GameOver ? "checkmate" : "check")">
             @StatusMessage
@@ -64,7 +99,7 @@
                             var isCaptureTarget = isLegalTarget && piece != null;
                             var isLastMove = (LastMoveFrom != null && LastMoveFrom.Row == row && LastMoveFrom.Col == col)
                                 || (LastMoveTo != null && LastMoveTo.Row == row && LastMoveTo.Col == col);
-                            var isDraggable = piece != null && piece.Color == CurrentTurn && !GameOver && !PendingPromotion;
+                            var isDraggable = piece != null && piece.Color == CurrentTurn && !GameOver && !PendingPromotion && !AiThinking;
 
                             var cssClass = $"square {(isLight ? "light" : "dark")}"
                                 + $" {(isSelected ? "selected" : "")}"
@@ -169,8 +204,8 @@
     private Square? LastMoveTo = null;
     private HashSet<(int Row, int Col)> LegalTargets = new();
 
-    private bool WhiteInCheck => IsKingInCheck(PieceColor.White);
-    private bool BlackInCheck => IsKingInCheck(PieceColor.Black);
+    private bool WhiteInCheck => ChessRules.IsKingInCheck(Board, PieceColor.White);
+    private bool BlackInCheck => ChessRules.IsKingInCheck(Board, PieceColor.Black);
 
     // ---- Clock ----
     private readonly int[] TimeControlPresets = { 5, 10, 15 };
@@ -180,12 +215,15 @@
     private System.Timers.Timer? GameClock;
     private bool GameStarted = false;
 
-    private class Square
-    {
-        public int Row { get; set; }
-        public int Col { get; set; }
-        public Square(int row, int col) { Row = row; Col = col; }
-    }
+    // ---- AI opponent ----
+    private enum OpponentMode { Human, Ai }
+    private OpponentMode Mode = OpponentMode.Human;
+    private AiDifficulty SelectedDifficulty = AiDifficulty.Club;
+    private PieceColor HumanColor = PieceColor.White;
+    private bool AiThinking = false;
+    private readonly ChessAi Ai = new();
+
+    private PieceColor AiColor => Opponent(HumanColor);
 
     protected override void OnInitialized()
     {
@@ -214,7 +252,7 @@
         WhiteSecondsRemaining = SelectedTimeControlMinutes * 60;
         BlackSecondsRemaining = SelectedTimeControlMinutes * 60;
         GameStarted = false;
-        StopClock(); // clock only starts once White makes the first move
+        StopClock(); // clock only starts once the first move is made
 
         for (int col = 0; col < 8; col++)
         {
@@ -233,6 +271,66 @@
             Board[0, col] = new ChessPiece { Color = PieceColor.Black, Type = backRow[col] };
             Board[7, col] = new ChessPiece { Color = PieceColor.White, Type = backRow[col] };
         }
+
+        // If the human chose to play Black, the AI (White) needs to open
+        _ = MaybeTriggerAiMove();
+    }
+
+    // ===================== AI opponent =====================
+
+    private void OnOpponentModeChanged(ChangeEventArgs e)
+    {
+        Mode = Enum.Parse<OpponentMode>(e.Value?.ToString() ?? "Human");
+        ResetGame();
+    }
+
+    private void OnDifficultyChanged(ChangeEventArgs e)
+    {
+        SelectedDifficulty = Enum.Parse<AiDifficulty>(e.Value?.ToString() ?? "Club");
+        ResetGame();
+    }
+
+    private void OnHumanColorChanged(ChangeEventArgs e)
+    {
+        HumanColor = Enum.Parse<PieceColor>(e.Value?.ToString() ?? "White");
+        ResetGame();
+    }
+
+    /// <summary>
+    /// If it's the AI's turn, runs the search on a background thread (so
+    /// the UI stays responsive and can show a "thinking" indicator), then
+    /// plays the resulting move through the exact same AttemptMove path a
+    /// human move would take.
+    /// </summary>
+    private async Task MaybeTriggerAiMove()
+    {
+        if (Mode != OpponentMode.Ai || GameOver || PendingPromotion) return;
+        if (CurrentTurn != AiColor) return;
+
+        AiThinking = true;
+        StateHasChanged();
+        await Task.Yield(); // let the "thinking" indicator actually render first
+
+        Move? move = null;
+        try
+        {
+            move = await Task.Run(() => Ai.GetBestMove(Board, AiColor, EnPassantTarget, SelectedDifficulty));
+        }
+        catch
+        {
+            // Defensive: never let a search bug take down the game
+        }
+
+        AiThinking = false;
+
+        if (move != null)
+        {
+            await AttemptMove(move.From, move.To, move.Promotion);
+        }
+        else
+        {
+            StateHasChanged();
+        }
     }
 
     // ===================== Clock =====================
@@ -244,7 +342,7 @@
     }
 
     /// <summary>Called right after the very first move is made — the clock
-    /// doesn't run at all until then, so White's opening move is unclocked.</summary>
+    /// doesn't run at all until then, so the opening move is unclocked.</summary>
     private void EnsureClockStarted()
     {
         if (!GameStarted)
@@ -276,11 +374,11 @@
 
     private async void OnClockTick(object? sender, System.Timers.ElapsedEventArgs e)
     {
-        if (GameOver || PendingPromotion) return; // pause while a promotion choice is pending
+        if (GameOver || PendingPromotion) return;
 
         await InvokeAsync(async () =>
         {
-            if (GameOver) return; // re-check inside the UI thread in case it changed just before this ran
+            if (GameOver) return;
 
             if (CurrentTurn == PieceColor.White)
             {
@@ -326,7 +424,7 @@
 
     private async Task OnSquareClick(int row, int col)
     {
-        if (GameOver || PendingPromotion) return;
+        if (GameOver || PendingPromotion || AiThinking) return;
 
         var square = new Square(row, col);
         var piece = Board[row, col];
@@ -354,13 +452,13 @@
 
     private void OnDragStart(int row, int col)
     {
-        if (GameOver || PendingPromotion) return;
+        if (GameOver || PendingPromotion || AiThinking) return;
         SelectPiece(new Square(row, col), Board[row, col]);
     }
 
     private async Task OnDrop(int row, int col)
     {
-        if (GameOver || PendingPromotion || SelectedSquare == null) return;
+        if (GameOver || PendingPromotion || AiThinking || SelectedSquare == null) return;
 
         if (SelectedSquare.Row == row && SelectedSquare.Col == col)
         {
@@ -371,7 +469,7 @@
         var moved = await AttemptMove(SelectedSquare, new Square(row, col));
         if (!moved)
         {
-            DeselectPiece(); // drop failed — don't leave a stale highlight hanging around
+            DeselectPiece();
         }
     }
 
@@ -399,14 +497,14 @@
             {
                 if (r == from.Row && c == from.Col) continue;
                 var to = new Square(r, c);
-                if (IsMoveValid(piece, from, to) && !WouldLeaveKingInCheck(piece, from, to))
+                if (ChessRules.IsMoveValid(Board, piece, from, to, EnPassantTarget) && !ChessRules.WouldLeaveKingInCheck(Board, piece, from, to))
                     LegalTargets.Add((r, c));
             }
 
         if (piece.Type == PieceType.King)
         {
-            if (CanCastle(piece.Color, true)) LegalTargets.Add((from.Row, from.Col + 2));
-            if (CanCastle(piece.Color, false)) LegalTargets.Add((from.Row, from.Col - 2));
+            if (ChessRules.CanCastle(Board, piece.Color, true)) LegalTargets.Add((from.Row, from.Col + 2));
+            if (ChessRules.CanCastle(Board, piece.Color, false)) LegalTargets.Add((from.Row, from.Col - 2));
         }
     }
 
@@ -415,10 +513,12 @@
     /// <summary>
     /// Validates and (if legal) performs a move from `from` to `to`,
     /// including castling and en passant, updates captures, notation,
-    /// promotion state, turn, game status, and plays a sound.
+    /// promotion state, turn, game status, and plays a sound. If the
+    /// move is a promotion and `autoPromoteTo` is supplied (used for AI
+    /// moves), it resolves immediately instead of opening the picker.
     /// Returns true if the move was actually made.
     /// </summary>
-    private async Task<bool> AttemptMove(Square from, Square to)
+    private async Task<bool> AttemptMove(Square from, Square to, PieceType? autoPromoteTo = null)
     {
         var piece = Board[from.Row, from.Col];
         if (piece == null || piece.Color != CurrentTurn) return false;
@@ -428,9 +528,9 @@
         if (piece.Type == PieceType.King && from.Row == to.Row && Math.Abs(to.Col - from.Col) == 2)
         {
             bool kingSide = to.Col > from.Col;
-            if (!CanCastle(piece.Color, kingSide)) return false;
+            if (!ChessRules.CanCastle(Board, piece.Color, kingSide)) return false;
 
-            PerformCastle(piece.Color, kingSide);
+            ChessRules.PerformCastle(Board, piece.Color, kingSide);
             EnPassantTarget = null;
             LastMoveFrom = from;
             LastMoveTo = to;
@@ -441,15 +541,16 @@
             EnsureClockStarted();
             UpdateGameStatus();
             await FinalizeMoveNotation(kingSide ? "O-O" : "O-O-O", "", isCapture: false, castled: true);
+            await MaybeTriggerAiMove();
             return true;
         }
 
         // ---- Normal / en passant moves ----
-        if (!IsMoveValid(piece, from, to)) return false;
-        if (WouldLeaveKingInCheck(piece, from, to)) return false;
+        if (!ChessRules.IsMoveValid(Board, piece, from, to, EnPassantTarget)) return false;
+        if (ChessRules.WouldLeaveKingInCheck(Board, piece, from, to)) return false;
 
         string pieceLetter = PieceLetter(piece.Type);
-        var (capturedAtTo, capturedEnPassant, _, _) = ApplyMove(piece, from, to);
+        var (capturedAtTo, capturedEnPassant, _, _) = ChessRules.ApplyMove(Board, piece, from, to);
         bool isCapture = capturedAtTo != null || capturedEnPassant != null;
 
         if (capturedAtTo != null)
@@ -479,9 +580,24 @@
             ? (isCapture ? $"{(char)('a' + from.Col)}x{ToAlgebraic(to)}" : ToAlgebraic(to))
             : $"{pieceLetter}{(isCapture ? "x" : "")}{ToAlgebraic(to)}";
 
-        // ---- Pawn promotion: pause here, don't switch turns yet ----
+        // ---- Pawn promotion ----
         if (piece.Type == PieceType.Pawn && (to.Row == 0 || to.Row == 7))
         {
+            if (autoPromoteTo.HasValue)
+            {
+                // AI move — resolve immediately, no modal
+                piece.Type = autoPromoteTo.Value;
+                string promoSuffix = $"={PieceLetter(autoPromoteTo.Value)}";
+
+                CurrentTurn = Opponent(CurrentTurn);
+                EnsureClockStarted();
+                UpdateGameStatus();
+                await FinalizeMoveNotation(baseNotation, promoSuffix, isCapture: isCapture, castled: false);
+                await MaybeTriggerAiMove();
+                return true;
+            }
+
+            // Human move — pause here, don't switch turns yet
             PendingPromotion = true;
             PromotionSquare = to;
             PendingMoveNotation = baseNotation;
@@ -494,6 +610,7 @@
         EnsureClockStarted();
         UpdateGameStatus();
         await FinalizeMoveNotation(baseNotation, "", isCapture: isCapture, castled: false);
+        await MaybeTriggerAiMove();
         return true;
     }
 
@@ -517,6 +634,8 @@
         string promoSuffix = $"={PieceLetter(chosenType)}";
         await FinalizeMoveNotation(PendingMoveNotation ?? "", promoSuffix, isCapture: PendingMoveWasCapture, castled: false);
         PendingMoveNotation = null;
+
+        await MaybeTriggerAiMove();
     }
 
     private async Task FinalizeMoveNotation(string baseNotation, string suffix, bool isCapture, bool castled)
@@ -562,8 +681,8 @@
 
     private void UpdateGameStatus()
     {
-        bool inCheck = IsKingInCheck(CurrentTurn);
-        bool hasMoves = HasAnyLegalMoves(CurrentTurn);
+        bool inCheck = ChessRules.IsKingInCheck(Board, CurrentTurn);
+        bool hasMoves = ChessRules.HasAnyLegalMoves(Board, CurrentTurn, EnPassantTarget);
         string playerName = CurrentTurn == PieceColor.White ? "White" : "Black";
 
         if (inCheck && !hasMoves)
@@ -587,283 +706,5 @@
         {
             StatusMessage = "";
         }
-    }
-
-    // ===================== Castling =====================
-
-    private bool CanCastle(PieceColor color, bool kingSide)
-    {
-        int homeRow = color == PieceColor.White ? 7 : 0;
-        int kingCol = 4;
-        int rookCol = kingSide ? 7 : 0;
-        int newKingCol = kingSide ? 6 : 2;
-
-        var king = Board[homeRow, kingCol];
-        var rook = Board[homeRow, rookCol];
-
-        if (king == null || king.Type != PieceType.King || king.Color != color || king.HasMoved) return false;
-        if (rook == null || rook.Type != PieceType.Rook || rook.Color != color || rook.HasMoved) return false;
-
-        int step = kingCol < rookCol ? 1 : -1;
-        for (int c = kingCol + step; c != rookCol; c += step)
-        {
-            if (Board[homeRow, c] != null) return false;
-        }
-
-        if (IsKingInCheck(color)) return false;
-
-        var opponent = Opponent(color);
-        int kingStep = newKingCol > kingCol ? 1 : -1;
-        for (int c = kingCol; c != newKingCol + kingStep; c += kingStep)
-        {
-            if (IsSquareAttacked(new Square(homeRow, c), opponent)) return false;
-        }
-
-        return true;
-    }
-
-    private void PerformCastle(PieceColor color, bool kingSide)
-    {
-        int homeRow = color == PieceColor.White ? 7 : 0;
-        int kingCol = 4;
-        int rookCol = kingSide ? 7 : 0;
-        int newKingCol = kingSide ? 6 : 2;
-        int newRookCol = kingSide ? 5 : 3;
-
-        var king = Board[homeRow, kingCol];
-        var rook = Board[homeRow, rookCol];
-
-        Board[homeRow, newKingCol] = king;
-        Board[homeRow, kingCol] = null;
-        Board[homeRow, newRookCol] = rook;
-        Board[homeRow, rookCol] = null;
-
-        if (king != null) king.HasMoved = true;
-        if (rook != null) rook.HasMoved = true;
-    }
-
-    // ===================== Check detection =====================
-
-    private Square? FindKing(PieceColor color)
-    {
-        for (int r = 0; r < 8; r++)
-            for (int c = 0; c < 8; c++)
-            {
-                var p = Board[r, c];
-                if (p != null && p.Type == PieceType.King && p.Color == color)
-                    return new Square(r, c);
-            }
-        return null;
-    }
-
-    private bool IsKingInCheck(PieceColor color)
-    {
-        var kingSquare = FindKing(color);
-        if (kingSquare == null) return false;
-
-        var opponent = Opponent(color);
-        return IsSquareAttacked(kingSquare, opponent);
-    }
-
-    private bool IsSquareAttacked(Square target, PieceColor byColor)
-    {
-        for (int r = 0; r < 8; r++)
-            for (int c = 0; c < 8; c++)
-            {
-                var p = Board[r, c];
-                if (p == null || p.Color != byColor) continue;
-
-                if (CanAttack(p, new Square(r, c), target))
-                    return true;
-            }
-        return false;
-    }
-
-    private bool CanAttack(ChessPiece piece, Square from, Square to)
-    {
-        int rowDiff = to.Row - from.Row;
-        int colDiff = to.Col - from.Col;
-        int absRow = Math.Abs(rowDiff);
-        int absCol = Math.Abs(colDiff);
-
-        switch (piece.Type)
-        {
-            case PieceType.Pawn:
-                int direction = piece.Color == PieceColor.White ? -1 : 1;
-                return absCol == 1 && rowDiff == direction;
-
-            case PieceType.Knight:
-                return (absRow == 2 && absCol == 1) || (absRow == 1 && absCol == 2);
-
-            case PieceType.Bishop:
-                return absRow == absCol && absRow > 0 && IsPathClear(from, to);
-
-            case PieceType.Rook:
-                return ((rowDiff == 0) != (colDiff == 0)) && IsPathClear(from, to);
-
-            case PieceType.Queen:
-                bool diagonal = absRow == absCol && absRow > 0;
-                bool straight = (rowDiff == 0) != (colDiff == 0);
-                return (diagonal || straight) && IsPathClear(from, to);
-
-            case PieceType.King:
-                return absRow <= 1 && absCol <= 1 && (absRow + absCol > 0);
-
-            default:
-                return false;
-        }
-    }
-
-    // ===================== Move simulation =====================
-
-    private (ChessPiece? capturedAtTo, ChessPiece? capturedEnPassant, int epRow, int epCol) ApplyMove(ChessPiece piece, Square from, Square to)
-    {
-        ChessPiece? capturedAtTo = Board[to.Row, to.Col];
-        ChessPiece? capturedEnPassant = null;
-        int epRow = -1, epCol = -1;
-
-        bool isEnPassant = piece.Type == PieceType.Pawn && to.Col != from.Col && capturedAtTo == null;
-        if (isEnPassant)
-        {
-            epRow = from.Row;
-            epCol = to.Col;
-            capturedEnPassant = Board[epRow, epCol];
-            Board[epRow, epCol] = null;
-        }
-
-        Board[to.Row, to.Col] = piece;
-        Board[from.Row, from.Col] = null;
-
-        return (capturedAtTo, capturedEnPassant, epRow, epCol);
-    }
-
-    private void UndoMove(ChessPiece piece, Square from, Square to, ChessPiece? capturedAtTo, ChessPiece? capturedEnPassant, int epRow, int epCol)
-    {
-        Board[from.Row, from.Col] = piece;
-        Board[to.Row, to.Col] = capturedAtTo;
-
-        if (capturedEnPassant != null)
-        {
-            Board[epRow, epCol] = capturedEnPassant;
-        }
-    }
-
-    private bool WouldLeaveKingInCheck(ChessPiece piece, Square from, Square to)
-    {
-        var (capturedAtTo, capturedEP, epRow, epCol) = ApplyMove(piece, from, to);
-        bool inCheck = IsKingInCheck(piece.Color);
-        UndoMove(piece, from, to, capturedAtTo, capturedEP, epRow, epCol);
-        return inCheck;
-    }
-
-    private bool HasAnyLegalMoves(PieceColor color)
-    {
-        for (int r = 0; r < 8; r++)
-            for (int c = 0; c < 8; c++)
-            {
-                var p = Board[r, c];
-                if (p == null || p.Color != color) continue;
-
-                var from = new Square(r, c);
-
-                for (int tr = 0; tr < 8; tr++)
-                    for (int tc = 0; tc < 8; tc++)
-                    {
-                        if (tr == r && tc == c) continue;
-                        var to = new Square(tr, tc);
-
-                        if (IsMoveValid(p, from, to) && !WouldLeaveKingInCheck(p, from, to))
-                            return true;
-                    }
-            }
-
-        return CanCastle(color, true) || CanCastle(color, false);
-    }
-
-    // ===================== Move-shape validation =====================
-
-    private bool IsMoveValid(ChessPiece piece, Square from, Square to)
-    {
-        var target = Board[to.Row, to.Col];
-
-        if (target != null && target.Color == piece.Color) return false;
-
-        int rowDiff = to.Row - from.Row;
-        int colDiff = to.Col - from.Col;
-        int absRow = Math.Abs(rowDiff);
-        int absCol = Math.Abs(colDiff);
-
-        switch (piece.Type)
-        {
-            case PieceType.Pawn:
-                return IsValidPawnMove(piece, from, to, rowDiff, colDiff, target);
-
-            case PieceType.Knight:
-                return (absRow == 2 && absCol == 1) || (absRow == 1 && absCol == 2);
-
-            case PieceType.Bishop:
-                return absRow == absCol && absRow > 0 && IsPathClear(from, to);
-
-            case PieceType.Rook:
-                return ((rowDiff == 0) != (colDiff == 0)) && IsPathClear(from, to);
-
-            case PieceType.Queen:
-                bool diagonal = absRow == absCol && absRow > 0;
-                bool straight = (rowDiff == 0) != (colDiff == 0);
-                return (diagonal || straight) && IsPathClear(from, to);
-
-            case PieceType.King:
-                return absRow <= 1 && absCol <= 1 && (absRow + absCol > 0);
-
-            default:
-                return false;
-        }
-    }
-
-    private bool IsValidPawnMove(ChessPiece piece, Square from, Square to, int rowDiff, int colDiff, ChessPiece? target)
-    {
-        int direction = piece.Color == PieceColor.White ? -1 : 1;
-        int startRow = piece.Color == PieceColor.White ? 6 : 1;
-
-        if (colDiff == 0)
-        {
-            if (target != null) return false;
-
-            if (rowDiff == direction) return true;
-
-            if (from.Row == startRow && rowDiff == 2 * direction)
-            {
-                var midRow = from.Row + direction;
-                return Board[midRow, from.Col] == null;
-            }
-
-            return false;
-        }
-
-        if (Math.Abs(colDiff) == 1 && rowDiff == direction)
-        {
-            if (target != null) return true;
-            return EnPassantTarget != null && to.Row == EnPassantTarget.Row && to.Col == EnPassantTarget.Col;
-        }
-
-        return false;
-    }
-
-    private bool IsPathClear(Square from, Square to)
-    {
-        int rowStep = Math.Sign(to.Row - from.Row);
-        int colStep = Math.Sign(to.Col - from.Col);
-
-        int r = from.Row + rowStep;
-        int c = from.Col + colStep;
-
-        while (r != to.Row || c != to.Col)
-        {
-            if (Board[r, c] != null) return false;
-            r += rowStep;
-            c += colStep;
-        }
-
-        return true;
     }
 }
