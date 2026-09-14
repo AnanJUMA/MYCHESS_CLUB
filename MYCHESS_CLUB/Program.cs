@@ -4,7 +4,8 @@ using MYCHESS_CLUB.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddScoped<TournamentService>();
+builder.Services.AddSingleton<TournamentService>();   // was likely already registered — change Scoped/Transient to Singleton
+builder.Services.AddScoped<BracketService>();          // stateless per-request logic, Scoped is fine
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 

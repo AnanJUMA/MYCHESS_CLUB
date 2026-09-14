@@ -1,5 +1,6 @@
 ﻿@page "/tournaments"
 @rendermode InteractiveServer
+@using MYCHESS_CLUB.Models
 @using MYCHESS_CLUB.Services
 @inject TournamentService TournamentService
 
@@ -34,14 +35,20 @@
                             <p><strong>📍 Location:</strong> @tournament.Location</p>
                             <p><strong>♟️ Format:</strong> @tournament.Format</p>
                             <p><strong>👥 Eligibility:</strong> @tournament.Eligibility</p>
+                            <p><strong>✅ Registered:</strong> @TournamentService.GetParticipants(tournament.Id).Count</p>
                         </div>
 
-                        <button @onclick="() => RegisterInterest(tournament)">Register Interest</button>
+                        <div class="register-row">
+                            <input @bind="nameInputs[tournament.Id]" placeholder="Your name" class="register-input" />
+                            <button @onclick="() => RegisterInterest(tournament)">Register Interest</button>
+                        </div>
 
-                        @if (registeredTournament == tournament)
+                        @if (registeredTournamentId == tournament.Id)
                         {
                             <p class="success-message">✅ Your interest in this tournament has been recorded!</p>
                         }
+
+                        <p><a href="@($"/tournaments/{tournament.Id}/bracket")">View Bracket →</a></p>
                     </div>
                 </div>
             }
@@ -77,15 +84,24 @@
 
 @code {
     private List<Tournament>? tournaments;
-    private Tournament? registeredTournament;
+    private int? registeredTournamentId;
+    private Dictionary<int, string> nameInputs = new();
 
     protected override void OnInitialized()
     {
         tournaments = TournamentService.GetTournaments();
+        foreach (var t in tournaments)
+            nameInputs[t.Id] = string.Empty;
     }
 
     private void RegisterInterest(Tournament tournament)
     {
-        registeredTournament = tournament;
+        var name = nameInputs.GetValueOrDefault(tournament.Id, string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        TournamentService.RegisterParticipant(tournament.Id, name);
+        registeredTournamentId = tournament.Id;
+        nameInputs[tournament.Id] = string.Empty;
     }
 }

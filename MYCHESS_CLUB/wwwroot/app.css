@@ -834,6 +834,76 @@ h1:focus {
     }
 }
 
+
+
+.bracket-container {
+    display: flex;
+    gap: 3rem;
+    overflow-x: auto;
+    padding: 1rem 0;
+}
+
+.bracket-round {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    min-width: 180px;
+}
+
+.round-title {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.round-matches {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    flex: 1;
+    gap: 2rem;
+}
+
+.bracket-match {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.bracket-player {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+    background: #fff;
+}
+
+    .bracket-player:last-child {
+        border-bottom: none;
+    }
+
+    .bracket-player:hover {
+        background: #f0f0f0;
+    }
+
+    .bracket-player.winner {
+        background: #d4edda;
+        font-weight: bold;
+    }
+
+
+.register-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin: 0.5rem 0;
+}
+
+.register-input {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    flex: 1;
+}
+
 /* Responsive for smaller screens */
 @media (max-width: 600px) {
     .square {

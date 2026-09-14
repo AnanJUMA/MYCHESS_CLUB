@@ -1,0 +1,57 @@
+﻿@page "/tournaments/{TournamentId:int}/bracket"
+@rendermode InteractiveServer
+@using MYCHESS_CLUB.Models
+@using MYCHESS_CLUB.Services
+@inject TournamentService TournamentService
+@inject BracketService BracketService
+
+<PageTitle>Bracket - Lucky Stars Chess Club</PageTitle>
+
+<div class="page-header">
+    <h1>@(tournament?.Name ?? "Tournament") — Bracket</h1>
+</div>
+
+@if (tournament is null)
+{
+    <p>Tournament not found.</p>
+}
+else if (participants.Count < 2)
+{
+    <p>Need at least 2 registered participants to generate a bracket. Currently have @participants.Count.</p>
+    <p><a href="/tournaments">← Back to Tournaments</a></p>
+}
+else
+{
+    @if (bracket is null)
+    {
+        <button @onclick="GenerateBracket">Generate Bracket (@participants.Count players)</button>
+    }
+    else
+    {
+        <TournamentBracket Bracket="bracket" Service="BracketService" OnBracketUpdated="StateHasChanged" />
+        <button @onclick="GenerateBracket" class="regenerate-btn">Regenerate Bracket</button>
+    }
+}
+
+@code {
+    [Parameter] public int TournamentId { get; set; }
+
+    private Tournament? tournament;
+    private List<Participant> participants = new();
+    private Bracket? bracket;
+
+    protected override void OnInitialized()
+    {
+        tournament = TournamentService.GetTournament(TournamentId);
+        participants = TournamentService.GetParticipants(TournamentId);
+    }
+
+    private void GenerateBracket()
+    {
+        participants = TournamentService.GetParticipants(TournamentId);
+        if (participants.Count >= 2)
+        {
+            bracket = BracketService.GenerateSingleElimination(TournamentId, participants);
+        }
+    }
+}

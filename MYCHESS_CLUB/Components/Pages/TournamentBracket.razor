@@ -1,0 +1,48 @@
+﻿@using MYCHESS_CLUB.Models
+@using MYCHESS_CLUB.Services
+
+@if (Bracket is null)
+{
+    <p>No bracket generated yet.</p>
+}
+else
+{
+    <div class="bracket-container">
+        @foreach (var round in Bracket.Rounds)
+        {
+            <div class="bracket-round">
+                <h4 class="round-title">@round.Name</h4>
+                <div class="round-matches">
+                    @foreach (var match in round.Matches)
+                    {
+                        <div class="bracket-match @(match.IsComplete ? "complete" : "")">
+                            <div class="bracket-player @(match.Winner == match.Player1 && match.Player1 is not null ? "winner" : "")"
+                                 @onclick="() => SelectWinner(match, match.Player1)">
+                                @(match.Player1?.Name ?? "TBD")
+                            </div>
+                            <div class="bracket-player @(match.Winner == match.Player2 && match.Player2 is not null ? "winner" : "")"
+                                 @onclick="() => SelectWinner(match, match.Player2)">
+                                @(match.Player2?.Name ?? (match.Player1 is not null ? "BYE" : "TBD"))
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Bracket? Bracket { get; set; }
+    [Parameter] public BracketService? Service { get; set; }
+    [Parameter] public EventCallback OnBracketUpdated { get; set; }
+
+    private async Task SelectWinner(Match match, Participant? player)
+    {
+        if (player is null || Bracket is null || Service is null) return;
+        if (match.Player1 is null || match.Player2 is null) return; // can't pick a winner over a bye/TBD slot
+
+        Service.AdvanceWinner(Bracket, match.Round, match.MatchNumber, player);
+        await OnBracketUpdated.InvokeAsync();
+    }
+}
