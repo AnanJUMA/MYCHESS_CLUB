@@ -1,0 +1,87 @@
+﻿@using MYCHESS_CLUB.Models
+
+<div class="mini-board" style="--mini-square-size: @(SquareSize)px;">
+    @for (int r = 7; r >= 0; r--)
+    {
+        var row = r;
+        <div class="mini-board-row">
+            @for (int c = 0; c < 8; c++)
+            {
+                var col = c;
+                var piece = Board[row, col];
+                var isLight = (row + col) % 2 == 0;
+                var isSelected = Interactive && SelectedSquare?.Row == row && SelectedSquare?.Col == col;
+                var cssClass = $"mini-square {(isLight ? "light" : "dark")} {(isSelected ? "selected" : "")} {(Interactive ? "interactive" : "")}";
+
+                <div class="@cssClass" @onclick="() => OnSquareClick(row, col)">
+                    @if (piece != null)
+                    {
+                        <span class="mini-piece" style="color:@(piece.Color == PieceColor.White ? "#fff" : "#000")">
+                            @piece.UnicodeSymbol
+                        </span>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Fen { get; set; } = "8/8/8/8/8/8/8/8 w - - 0 1";
+    [Parameter] public bool Interactive { get; set; } = false;
+    [Parameter] public int SquareSize { get; set; } = 44;
+
+    // When set, this board state is shown directly instead of parsing Fen —
+    // used to display the position right after a correct puzzle move,
+    // without needing a full board-to-FEN serializer yet.
+    [Parameter] public ChessPiece?[,]? BoardOverride { get; set; }
+
+    // Fired when the user clicks a piece then a destination square, in
+    // interactive mode. The caller decides whether it's correct/legal —
+    // this component doesn't mutate its own board on click, so the
+    // parent updates Fen (e.g. to the resulting position) to reflect
+    // the outcome.
+    [Parameter] public EventCallback<(Square From, Square To)> OnMoveAttempt { get; set; }
+
+    private ChessPiece?[,] Board = new ChessPiece?[8, 8];
+    private PieceColor Turn = PieceColor.White;
+    private Square? SelectedSquare;
+
+    protected override void OnParametersSet()
+    {
+        if (BoardOverride != null)
+        {
+            Board = BoardOverride;
+        }
+        else
+        {
+            (Board, Turn) = Notation.ParseFen(Fen);
+        }
+        SelectedSquare = null;
+    }
+
+    private async Task OnSquareClick(int row, int col)
+    {
+        if (!Interactive) return;
+
+        var square = new Square(row, col);
+        var piece = Board[row, col];
+
+        if (SelectedSquare == null)
+        {
+            if (piece != null && piece.Color == Turn)
+                SelectedSquare = square;
+            return;
+        }
+
+        if (SelectedSquare.Row == row && SelectedSquare.Col == col)
+        {
+            SelectedSquare = null;
+            return;
+        }
+
+        var from = SelectedSquare;
+        SelectedSquare = null;
+        await OnMoveAttempt.InvokeAsync((from, square));
+    }
+}

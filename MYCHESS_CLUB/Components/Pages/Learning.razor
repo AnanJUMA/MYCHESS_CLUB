@@ -1,0 +1,262 @@
+﻿@page "/learning"
+@attribute [Authorize(Roles = "Member")]
+@using Microsoft.AspNetCore.Authorization
+@using MYCHESS_CLUB.Models
+@rendermode InteractiveServer
+
+<PageTitle>Learning - Lucky Stars Chess Club</PageTitle>
+
+<div class="learning-container">
+    <h1>📚 Learning Center</h1>
+
+    <div class="learning-tabs">
+        <button class="@(ActiveTab == LearningTab.Openings ? "active-tab" : "")" @onclick='() => SetTab(LearningTab.Openings)'>Openings</button>
+        <button class="@(ActiveTab == LearningTab.Tactics ? "active-tab" : "")" @onclick='() => SetTab(LearningTab.Tactics)'>Tactics</button>
+        <button class="@(ActiveTab == LearningTab.Endgames ? "active-tab" : "")" @onclick='() => SetTab(LearningTab.Endgames)'>Endgames</button>
+        <button class="@(ActiveTab == LearningTab.Puzzles ? "active-tab" : "")" @onclick='() => SetTab(LearningTab.Puzzles)'>Puzzles</button>
+    </div>
+
+    @if (ActiveTab == LearningTab.Openings)
+    {
+        @foreach (var lesson in Openings)
+        {
+            <div class="lesson-card">
+                <MiniBoard Fen="@lesson.Fen" SquareSize="40" />
+                <div class="lesson-text">
+                    <h3>@lesson.Title</h3>
+                    <div class="lesson-moves">@lesson.Moves</div>
+                    <p>@lesson.Description</p>
+                </div>
+            </div>
+        }
+    }
+    else if (ActiveTab == LearningTab.Tactics)
+    {
+        @foreach (var lesson in Tactics)
+        {
+            <div class="lesson-card">
+                <MiniBoard Fen="@lesson.Fen" SquareSize="40" />
+                <div class="lesson-text">
+                    <h3>@lesson.Title</h3>
+                    <p>@lesson.Description</p>
+                </div>
+            </div>
+        }
+    }
+    else if (ActiveTab == LearningTab.Endgames)
+    {
+        @foreach (var lesson in Endgames)
+        {
+            <div class="lesson-card">
+                <MiniBoard Fen="@lesson.Fen" SquareSize="40" />
+                <div class="lesson-text">
+                    <h3>@lesson.Title</h3>
+                    <p>@lesson.Description</p>
+                </div>
+            </div>
+        }
+    }
+    else if (ActiveTab == LearningTab.Puzzles)
+    {
+        var puzzle = Puzzles[CurrentPuzzleIndex];
+
+        <div class="puzzle-card">
+            <div class="puzzle-meta">
+                Puzzle @(CurrentPuzzleIndex + 1) of @Puzzles.Count — <strong>@puzzle.Theme</strong>
+            </div>
+
+            <MiniBoard Fen="@puzzle.Fen"
+                       BoardOverride="@SolvedBoard"
+                       Interactive="@(!Solved)"
+                       SquareSize="52"
+                       OnMoveAttempt="HandlePuzzleMove" />
+
+            <p>@puzzle.Description</p>
+
+            @if (!string.IsNullOrEmpty(Feedback))
+            {
+                <div class="puzzle-feedback @(FeedbackIsError ? "error" : "success")">@Feedback</div>
+            }
+
+            <div class="puzzle-nav">
+                @if (Solved)
+                {
+                    <button @onclick="NextPuzzle">Next Puzzle →</button>
+                }
+                else
+                {
+                    <button @onclick="ShowHint">Hint</button>
+                    <button @onclick="SkipPuzzle">Skip</button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private enum LearningTab { Openings, Tactics, Endgames, Puzzles }
+    private LearningTab ActiveTab = LearningTab.Openings;
+
+    private record Lesson(string Title, string Fen, string Description, string Moves = "");
+
+    private void SetTab(LearningTab tab)
+    {
+        ActiveTab = tab;
+        if (tab == LearningTab.Puzzles)
+        {
+            ResetPuzzleState();
+        }
+    }
+
+    // ===================== Openings =====================
+
+    private readonly List<Lesson> Openings = new()
+    {
+        new Lesson("Starting Position", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            "Every game begins here. White moves first, and the fight for the center squares (d4, d5, e4, e5) starts immediately."),
+
+        new Lesson("King's Pawn Opening", "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+            "1.e4 stakes a claim in the center and opens lines for the bishop and queen. It's the most popular first move in chess history.",
+            "1. e4"),
+
+        new Lesson("Open Game (1.e4 e5)", "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2",
+            "Black mirrors White's central claim. This leads to \"open\" positions with active piece play — the classical way to learn tactics.",
+            "1. e4 e5"),
+
+        new Lesson("Sicilian Defense", "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+            "The most popular response to 1.e4 at every level above beginner. Black fights for the center asymmetrically rather than mirroring White, aiming for unbalanced, sharp play.",
+            "1. e4 c5"),
+
+        new Lesson("Queen's Pawn Opening", "rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2",
+            "1.d4 d5 leads to closed, strategic games where piece maneuvering and pawn structure often matter more than early tactics.",
+            "1. d4 d5"),
+
+        new Lesson("Italian Game", "r1bqkbnr/pppp1ppp/8/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 5 3",
+            "One of the oldest recorded openings. White develops quickly and aims the bishop at Black's weakest square, f7.",
+            "1. e4 e5 2. Nf3 Nc6 3. Bc4"),
+    };
+
+    // ===================== Tactics =====================
+
+    private readonly List<Lesson> Tactics = new()
+    {
+        new Lesson("The Fork", "r3k3/2N5/8/8/8/8/8/4K3 w - - 0 1",
+            "A single piece attacks two enemy pieces at once. Here White's knight on c7 forks the king on e8 and the rook on a8 — Black can only save one."),
+
+        new Lesson("The Pin", "4k3/8/8/8/4n3/8/8/K3R3 w - - 0 1",
+            "A piece is \"pinned\" when moving it would expose a more valuable piece behind it. Black's knight on e5 can't move off the e-file — it would expose the king to the rook on e1."),
+
+        new Lesson("The Skewer", "7q/8/8/8/7k/8/8/K6R w - - 0 1",
+            "Like a pin in reverse: the more valuable piece is attacked first. Once the king on h5 moves out of check, the rook wins the queen behind it on h8."),
+    };
+
+    // ===================== Endgames =====================
+
+    private readonly List<Lesson> Endgames = new()
+    {
+        new Lesson("King & Queen vs King", "4k3/3Q4/4K3/8/8/8/8/8 w - - 0 1",
+            "The easiest checkmate to learn. Use the queen to confine the enemy king to the edge of the board, then bring your own king up to help deliver mate — being careful never to stalemate."),
+
+        new Lesson("King & Rook vs King", "4k3/R7/4K3/8/8/8/8/8 w - - 0 1",
+            "Slower than the queen mate but the same idea: box the king to the edge with the rook, walk your king in, and mate along the edge."),
+
+        new Lesson("King & Pawn: The Opposition", "8/4k3/8/4K3/4P3/8/8/8 b - - 0 1",
+            "Whoever does NOT have to move (\"has the opposition\") usually wins this type of ending. With Black to move here, White's king will out-maneuver Black's and escort the pawn to promotion."),
+    };
+
+    // ===================== Puzzles =====================
+
+    private readonly List<Puzzle> Puzzles = new()
+    {
+        new Puzzle
+        {
+            Fen = "r3k3/8/N7/8/8/8/8/4K3 w - - 0 1",
+            SolutionFrom = "a6",
+            SolutionTo = "c7",
+            Theme = "Fork",
+            Description = "White to move. Find the knight move that forks the king and rook."
+        },
+        new Puzzle
+        {
+            Fen = "6k1/5ppp/8/8/8/8/8/R3K3 w - - 0 1",
+            SolutionFrom = "a1",
+            SolutionTo = "a8",
+            Theme = "Checkmate in 1",
+            Description = "White to move. Black's own pawns block every escape square — find mate in one."
+        },
+        new Puzzle
+        {
+            Fen = "3r3k/8/8/8/8/8/8/K2Q4 w - - 0 1",
+            SolutionFrom = "d1",
+            SolutionTo = "d8",
+            Theme = "Free Material",
+            Description = "White to move. Black's rook is undefended — find the move that wins it."
+        },
+    };
+
+    private int CurrentPuzzleIndex = 0;
+    private bool Solved = false;
+    private string Feedback = "";
+    private bool FeedbackIsError = false;
+    private ChessPiece?[,]? SolvedBoard = null;
+
+    private void ResetPuzzleState()
+    {
+        Solved = false;
+        Feedback = "";
+        SolvedBoard = null;
+    }
+
+    private void HandlePuzzleMove((Square From, Square To) move)
+    {
+        var puzzle = Puzzles[CurrentPuzzleIndex];
+        var (board, _) = Notation.ParseFen(puzzle.Fen);
+        var piece = board[move.From.Row, move.From.Col];
+
+        if (piece == null) return;
+
+        // Reject anything that isn't even a legal chess move, using the
+        // same rules engine the main board uses.
+        if (!ChessRules.IsMoveValid(board, piece, move.From, move.To, null)
+            || ChessRules.WouldLeaveKingInCheck(board, piece, move.From, move.To))
+        {
+            Feedback = "That's not a legal move here — try again.";
+            FeedbackIsError = true;
+            return;
+        }
+
+        var solutionFrom = Notation.FromAlgebraic(puzzle.SolutionFrom);
+        var solutionTo = Notation.FromAlgebraic(puzzle.SolutionTo);
+        bool isCorrect = move.From.Row == solutionFrom.Row && move.From.Col == solutionFrom.Col
+            && move.To.Row == solutionTo.Row && move.To.Col == solutionTo.Col;
+
+        if (isCorrect)
+        {
+            ChessRules.ApplyMove(board, piece, move.From, move.To);
+            SolvedBoard = board;
+            Solved = true;
+            Feedback = "Correct! " + puzzle.Description;
+            FeedbackIsError = false;
+        }
+        else
+        {
+            Feedback = "That's legal, but not the winning move — try again.";
+            FeedbackIsError = true;
+        }
+    }
+
+    private void ShowHint()
+    {
+        var puzzle = Puzzles[CurrentPuzzleIndex];
+        Feedback = $"Hint: look at the piece on {puzzle.SolutionFrom}.";
+        FeedbackIsError = false;
+    }
+
+    private void SkipPuzzle() => NextPuzzle();
+
+    private void NextPuzzle()
+    {
+        CurrentPuzzleIndex = (CurrentPuzzleIndex + 1) % Puzzles.Count;
+        ResetPuzzleState();
+    }
+}

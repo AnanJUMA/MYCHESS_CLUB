@@ -1,0 +1,96 @@
+﻿@page "/history"
+@attribute [Authorize(Roles = "Member")]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using MYCHESS_CLUB.Data
+@using MYCHESS_CLUB.Models
+@rendermode InteractiveServer
+@inject ApplicationDbContext Db
+
+<PageTitle>Club History - Lucky Stars Chess Club</PageTitle>
+
+<div class="history-container">
+    <h1>🏆 Club History</h1>
+
+    <div class="learning-tabs">
+        <button class="@(ActiveTab == HistoryTab.Club ? "active-tab" : "")" @onclick='() => ActiveTab = HistoryTab.Club'>Club History</button>
+        <button class="@(ActiveTab == HistoryTab.Players ? "active-tab" : "")" @onclick='() => ActiveTab = HistoryTab.Players'>Player History</button>
+    </div>
+
+    @if (ActiveTab == HistoryTab.Club)
+    {
+        <div class="history-timeline">
+            @foreach (var entry in Timeline)
+            {
+                <div class="timeline-entry">
+                    <h4>@entry.Year — @entry.Title</h4>
+                    <p>@entry.Description</p>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        @if (Members == null)
+        {
+            <p>Loading members...</p>
+        }
+        else if (Members.Count == 0)
+        {
+            <p>No members have joined yet — be the first!</p>
+        }
+        else
+        {
+            <table class="member-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Rating</th>
+                        <th>Member Since</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var member in Members)
+                    {
+                        <tr>
+                            <td>@member.Name</td>
+                            <td>@member.Rating</td>
+                            <td>@member.JoinedAt.ToString("MMMM yyyy")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <p class="history-note">
+                Full game and tournament records per player are coming once the tournament
+                system is wired up — this table will grow into each player's match history,
+                results, and rating changes over time.
+            </p>
+        }
+    }
+</div>
+
+@code {
+    private enum HistoryTab { Club, Players }
+    private HistoryTab ActiveTab = HistoryTab.Club;
+
+    private record TimelineEntry(string Year, string Title, string Description);
+
+    // Placeholder content — swap in your club's real history whenever you're ready.
+    private readonly List<TimelineEntry> Timeline = new()
+    {
+        new TimelineEntry("2024", "Club Founded", "Lucky Stars Chess Club opened its doors with a handful of founding members meeting weekly to play and study together."),
+        new TimelineEntry("2025", "First Club Tournament", "Our first internal tournament ran with a small group of members, setting the format for events to come."),
+        new TimelineEntry("2026", "Online Play Launches", "Members can now play each other and study directly on the club website."),
+    };
+
+    private List<Player>? Members;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Members = await Db.Players
+            .Where(p => p.IdentityUserId != null) // only actual members, not guest tournament entrants
+            .OrderByDescending(p => p.Rating)
+            .ToListAsync();
+    }
+}

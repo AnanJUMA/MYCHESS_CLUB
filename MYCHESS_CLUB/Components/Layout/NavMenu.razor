@@ -1,10 +1,23 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
+﻿@using Microsoft.AspNetCore.Components.Authorization
+
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="">LUCKY_STARS</a>
     </div>
 </div>
 
 <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<AuthorizeView>
+    <Authorized>
+        <span>Welcome, @context.User.Identity?.Name</span>
+        <form action="/Account/Logout" method="post"><button type="submit">Log Out</button></form>
+    </Authorized>
+    <NotAuthorized>
+        <a href="/Account/Login">Log In</a>
+        <a href="/Account/Register">Join the Club</a>
+    </NotAuthorized>
+</AuthorizeView>
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column">
@@ -53,4 +66,3 @@
         </div>
     </nav>
 </div>
-

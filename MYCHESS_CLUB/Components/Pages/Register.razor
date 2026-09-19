@@ -1,0 +1,95 @@
+﻿@page "/Account/Register"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using MYCHESS_CLUB.Data
+@using MYCHESS_CLUB.Models
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject ApplicationDbContext Db
+@inject NavigationManager Navigation
+
+@* Same reasoning as Login.razor: no @rendermode, so the auth cookie can
+   actually be written on the response. *@
+
+<PageTitle>Join the Club - Lucky Stars Chess Club</PageTitle>
+
+<div class="auth-form">
+    <h1>Membership Registration</h1>
+    <p>Join to play fellow members, access the learning page, and see club history.</p>
+
+    <EditForm Model="Input" method="post" OnValidSubmit="RegisterUser" FormName="register">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="form-field">
+            <label>Full Name</label>
+            <InputText @bind-Value="Input.FullName" />
+        </div>
+        <div class="form-field">
+            <label>Email</label>
+            <InputText @bind-Value="Input.Email" />
+        </div>
+        <div class="form-field">
+            <label>Password</label>
+            <InputText type="password" @bind-Value="Input.Password" />
+        </div>
+
+        <button type="submit">Join</button>
+    </EditForm>
+
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <p class="auth-error">@ErrorMessage</p>
+    }
+
+    <p>Already a member? <a href="/Account/Login">Log in</a></p>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private InputModel? Input { get; set; }
+
+    private string? ErrorMessage;
+
+    protected override void OnInitialized()
+    {
+        Input ??= new();
+    }
+
+    private async Task RegisterUser()
+    {
+        var user = new ApplicationUser { UserName = Input!.Email, Email = Input.Email };
+        var result = await UserManager.CreateAsync(user, Input.Password);
+
+        if (!result.Succeeded)
+        {
+            ErrorMessage = string.Join(" ", result.Errors.Select(e => e.Description));
+            return;
+        }
+
+        await UserManager.AddToRoleAsync(user, "Member");
+
+        Db.Players.Add(new Player
+        {
+            IdentityUserId = user.Id,
+            Name = Input.FullName,
+            Email = Input.Email
+        });
+        await Db.SaveChangesAsync();
+
+        await SignInManager.SignInAsync(user, isPersistent: true);
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+
+    private class InputModel
+    {
+        [Required]
+        public string FullName { get; set; } = "";
+
+        [Required, EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required, MinLength(6, ErrorMessage = "Password must be at least 6 characters.")]
+        public string Password { get; set; } = "";
+    }
+}

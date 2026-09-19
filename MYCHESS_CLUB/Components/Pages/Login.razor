@@ -1,0 +1,76 @@
+﻿@page "/Account/Login"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using MYCHESS_CLUB.Data
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager Navigation
+
+@* No @rendermode here on purpose. Identity's SignInManager writes the auth
+   cookie onto the HTTP response — that only works during a normal static
+   server-rendered request/response cycle, not inside an already-open
+   InteractiveServer circuit. Login/Register/Logout all stay static. *@
+
+<PageTitle>Log In - Lucky Stars Chess Club</PageTitle>
+
+<div class="auth-form">
+    <h1>Log In</h1>
+
+    <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="form-field">
+            <label>Email</label>
+            <InputText @bind-Value="Input.Email" />
+        </div>
+        <div class="form-field">
+            <label>Password</label>
+            <InputText type="password" @bind-Value="Input.Password" />
+        </div>
+
+        <button type="submit">Log In</button>
+    </EditForm>
+
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <p class="auth-error">@ErrorMessage</p>
+    }
+
+    <p>Not a member yet? <a href="/Account/Register">Join the club</a></p>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private InputModel? Input { get; set; }
+
+    private string? ErrorMessage;
+
+    protected override void OnInitialized()
+    {
+        Input ??= new();
+    }
+
+    private async Task LoginUser()
+    {
+        var result = await SignInManager.PasswordSignInAsync(
+            Input!.Email, Input.Password, isPersistent: true, lockoutOnFailure: false);
+
+        if (result.Succeeded)
+        {
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+        else
+        {
+            ErrorMessage = "Invalid email or password.";
+        }
+    }
+
+    private class InputModel
+    {
+        [Required, EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required]
+        public string Password { get; set; } = "";
+    }
+}
